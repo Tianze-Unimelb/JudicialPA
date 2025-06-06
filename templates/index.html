@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>司法心理情感计算分析系统</title>
+
+    <!-- 引入外部资源 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- 引入本地样式 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="app">
+        {% raw %}  <!-- 使用raw块防止Jinja2解析Vue语法 -->
+        <!-- 头部导航 -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <span>司法心理情感分析系统</span>
+                </div>
+
+                <nav class="nav">
+                    <div class="nav-item" :class="{active: currentView === 'dashboard'}" @click="switchView('dashboard')">
+                        <i class="fas fa-chart-line"></i>
+                        <span>仪表盘</span>
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'analysis'}" @click="switchView('analysis')">
+                        <i class="fas fa-microscope"></i>
+                        <span>实时分析</span>
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'reports'}" @click="switchView('reports')">
+                        <i class="fas fa-file-alt"></i>
+                        <span>分析报告</span>
+                    </div>
+                    <div class="nav-item" :class="{active: currentView === 'settings'}" @click="switchView('settings')">
+                        <i class="fas fa-cog"></i>
+                        <span>设置</span>
+                    </div>
+                </nav>
+            </div>
+        </header>
+
+        <!-- 主容器 -->
+        <main class="main-container">
+            <!-- 仪表盘视图 -->
+            <div v-if="currentView === 'dashboard'" class="fade-in">
+                <h1 style="margin-bottom: 2rem; font-size: 2rem;">实时监控仪表盘</h1>
+
+                <div class="dashboard-grid">
+                    <!-- 情感强度卡片 -->
+                    <div class="card glass">
+                        <div class="card-header">
+                            <h3 class="card-title">情感强度指数</h3>
+                            <i class="fas fa-heart-pulse card-icon" style="color: #f093fb;"></i>
+                        </div>
+                        <div class="metric-value">{{ emotionIntensity }}</div>
+                        <div class="chart-container" ref="gaugeChart"></div>
+                        <div class="status-badge" :class="intensityLevel">
+                            <i class="fas fa-circle"></i>
+                            {{ intensityStatus }}
+                        </div>
+                    </div>
+
+                    <!-- 心理状态雷达图 -->
+                    <div class="card glass">
+                        <div class="card-header">
+                            <h3 class="card-title">心理状态评估</h3>
+                            <i class="fas fa-radar card-icon" style="color: #4facfe;"></i>
+                        </div>
+                        <div class="chart-container" ref="radarChart"></div>
+                    </div>
+
+                    <!-- 情绪分布 -->
+                    <div class="card glass">
+                        <div class="card-header">
+                            <h3 class="card-title">实时情绪分布</h3>
+                            <i class="fas fa-chart-bar card-icon" style="color: #fa709a;"></i>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div v-for="(value, emotion) in emotionDistribution" :key="emotion">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                    <span>{{ translateEmotion(emotion) }}</span>
+                                    <span>{{ value }}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" :style="{width: value + '%'}"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 风险预警 -->
+                    <div class="card glass">
+                        <div class="card-header">
+                            <h3 class="card-title">风险预警</h3>
+                            <i class="fas fa-exclamation-triangle card-icon" style="color: #fee140;"></i>
+                        </div>
+                        <div v-if="riskWarnings.length === 0" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                            <p>暂无风险预警</p>
+                        </div>
+                        <div v-else style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div v-for="warning in riskWarnings" :key="warning.id" class="glass" style="padding: 1rem; border-radius: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div>
+                                        <h4 style="margin-bottom: 0.5rem;">{{ warning.type }}</h4>
+                                        <p style="color: var(--text-secondary); font-size: 0.875rem;">{{ warning.description }}</p>
+                                    </div>
+                                    <span class="status-badge" :class="warning.level">
+                                        {{ warning.level }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 干预建议 -->
+                <div class="card glass" style="margin-top: 2rem;">
+                    <div class="card-header">
+                        <h3 class="card-title">干预建议</h3>
+                        <i class="fas fa-lightbulb card-icon" style="color: #667eea;"></i>
+                    </div>
+                    <div class="dashboard-grid">
+                        <div v-for="(items, type) in interventionSuggestions" :key="type">
+                            <h4 style="margin-bottom: 1rem; color: var(--text-secondary);">{{ translateInterventionType(type) }}</h4>
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                <div v-for="item in items" :key="item.action" class="glass" style="padding: 1rem; border-radius: 8px;">
+                                    <p>{{ item.action }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 实时分析视图 -->
+            <div v-if="currentView === 'analysis'" class="fade-in">
+                <h1 style="margin-bottom: 2rem; font-size: 2rem;">多模态实时分析</h1>
+
+                <div class="analysis-panel">
+                    <!-- 视频分析 -->
+                    <div class="card glass analysis-section">
+                        <h3 style="margin-bottom: 1.5rem;">
+                            <i class="fas fa-video" style="margin-right: 0.5rem;"></i>
+                            面部表情分析
+                        </h3>
+                        <div class="video-container">
+                            <video ref="videoElement" class="video-feed" autoplay></video>
+                            <canvas ref="canvasElement" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+                        </div>
+                        <div class="control-group">
+                            <button @click="toggleCamera" class="btn" :class="cameraActive ? 'btn-secondary' : 'btn-primary'">
+                                <i class="fas" :class="cameraActive ? 'fa-stop' : 'fa-play'"></i>
+                                {{ cameraActive ? '关闭摄像头' : '开启摄像头' }}
+                            </button>
+                            <button @click="captureFrame" class="btn btn-secondary" :disabled="!cameraActive">
+                                <i class="fas fa-camera"></i>
+                                捕获画面
+                            </button>
+                        </div>
+
+                        <div v-if="faceEmotions" style="margin-top: 2rem;">
+                            <h4 style="margin-bottom: 1rem;">检测结果</h4>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <span v-for="(value, emotion) in faceEmotions.emotions" :key="emotion"
+                                      class="status-badge success" v-if="value > 0.1">
+                                    {{ translateEmotion(emotion) }}: {{ (value * 100).toFixed(1) }}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 语音分析 -->
+                    <div class="card glass analysis-section">
+                        <h3 style="margin-bottom: 1.5rem;">
+                            <i class="fas fa-microphone" style="margin-right: 0.5rem;"></i>
+                            语音情感分析
+                        </h3>
+                        <div class="glass" style="height: 150px; border-radius: 12px; margin-bottom: 1rem; position: relative; overflow: hidden;">
+                            <div ref="audioVisualizer" style="width: 100%; height: 100%;"></div>
+                        </div>
+                        <div class="control-group">
+                            <button @click="toggleRecording" class="btn" :class="isRecording ? 'btn-secondary pulse' : 'btn-primary'">
+                                <i class="fas" :class="isRecording ? 'fa-stop' : 'fa-microphone'"></i>
+                                {{ isRecording ? '停止录音' : '开始录音' }}
+                            </button>
+                            <button @click="playbackAudio" class="btn btn-secondary" :disabled="!audioData">
+                                <i class="fas fa-play"></i>
+                                播放录音
+                            </button>
+                        </div>
+                        <div v-if="isRecording" style="text-align: center; margin-top: 1rem; color: #f5576c;">
+                            录音时长: {{ recordingTime }}s
+                        </div>
+
+                        <div v-if="voiceAnalysis" style="margin-top: 2rem;">
+                            <h4 style="margin-bottom: 1rem;">分析结果</h4>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                                <div class="glass" style="padding: 1rem; text-align: center; border-radius: 8px;">
+                                    <p style="color: var(--text-secondary); font-size: 0.875rem;">音调</p>
+                                    <p style="font-size: 1.25rem; font-weight: 600;">{{ voiceAnalysis.pitch?.type || 'N/A' }}</p>
+                                </div>
+                                <div class="glass" style="padding: 1rem; text-align: center; border-radius: 8px;">
+                                    <p style="color: var(--text-secondary); font-size: 0.875rem;">音量</p>
+                                    <p style="font-size: 1.25rem; font-weight: 600;">{{ voiceAnalysis.volume?.level || 'N/A' }}</p>
+                                </div>
+                                <div class="glass" style="padding: 1rem; text-align: center; border-radius: 8px;">
+                                    <p style="color: var(--text-secondary); font-size: 0.875rem;">语速</p>
+                                    <p style="font-size: 1.25rem; font-weight: 600;">{{ voiceAnalysis.speed?.type || 'N/A' }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 文本分析 -->
+                    <div class="card glass analysis-section">
+                        <h3 style="margin-bottom: 1.5rem;">
+                            <i class="fas fa-file-alt" style="margin-right: 0.5rem;"></i>
+                            文本情感分析
+                        </h3>
+                        <textarea v-model="textInput" class="text-input" placeholder="请输入或粘贴要分析的文本内容..."></textarea>
+                        <div class="control-group">
+                            <button @click="analyzeText" class="btn btn-primary" :disabled="!textInput">
+                                <i class="fas fa-search"></i>
+                                分析文本
+                            </button>
+                            <button @click="clearText" class="btn btn-secondary">
+                                <i class="fas fa-trash"></i>
+                                清空
+                            </button>
+                        </div>
+
+                        <div v-if="textAnalysis" style="margin-top: 2rem;">
+                            <h4 style="margin-bottom: 1rem;">分析结果</h4>
+                            <div class="glass" style="padding: 1.5rem; border-radius: 12px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                                    <span>整体情感</span>
+                                    <span class="status-badge" :class="textAnalysis.overall?.label?.toLowerCase() || 'neutral'">
+                                        {{ textAnalysis.overall?.label || 'N/A' }}
+                                    </span>
+                                </div>
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>一致性</span>
+                                        <span>{{ (textAnalysis.consistency * 100).toFixed(1) }}%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" :style="{width: (textAnalysis.consistency * 100) + '%'}"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 生成报告按钮 -->
+                <div style="text-align: center; margin-top: 3rem;">
+                    <button @click="generateReport" class="btn btn-primary" style="font-size: 1.25rem; padding: 1rem 3rem;">
+                        <i class="fas fa-file-export"></i>
+                        生成综合分析报告
+                    </button>
+                </div>
+            </div>
+
+            <!-- 报告视图 -->
+            <div v-if="currentView === 'reports'" class="fade-in">
+                <h1 style="margin-bottom: 2rem; font-size: 2rem;">分析报告</h1>
+
+                <div v-if="!comprehensiveReport" class="card glass" style="text-align: center; padding: 4rem;">
+                    <i class="fas fa-file-alt" style="font-size: 4rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
+                    <p style="color: var(--text-secondary);">暂无报告，请先进行分析</p>
+                </div>
+
+                <div v-else class="card glass">
+                    <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 2rem;">
+                        <h2 style="margin-bottom: 1rem;">综合评估报告</h2>
+                        <div style="display: flex; gap: 2rem; color: var(--text-secondary);">
+                            <span><i class="fas fa-calendar"></i> {{ formatDateTime(comprehensiveReport.timestamp) }}</span>
+                            <span><i class="fas fa-hashtag"></i> {{ comprehensiveReport.id }}</span>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid" style="margin-bottom: 2rem;">
+                        <div class="glass" style="padding: 2rem; text-align: center; border-radius: 12px;">
+                            <i class="fas fa-heart-pulse" style="font-size: 2rem; color: #f093fb; margin-bottom: 1rem;"></i>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">情感强度指数</p>
+                            <p class="metric-value" style="font-size: 2rem;">{{ comprehensiveReport.emotion_intensity_index }}</p>
+                        </div>
+
+                        <div class="glass" style="padding: 2rem; text-align: center; border-radius: 12px;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; color: #fee140; margin-bottom: 1rem;"></i>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">风险等级</p>
+                            <span class="status-badge" :class="comprehensiveReport.risk_level" style="font-size: 1.25rem;">
+                                {{ comprehensiveReport.risk_level }}
+                            </span>
+                        </div>
+
+                        <div class="glass" style="padding: 2rem; text-align: center; border-radius: 12px;">
+                            <i class="fas fa-comments" style="font-size: 2rem; color: #4facfe; margin-bottom: 1rem;"></i>
+                            <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">沟通评估</p>
+                            <p style="font-size: 1.25rem;">{{ comprehensiveReport.communication_assessment }}</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 2rem;">
+                        <h3 style="margin-bottom: 1rem;">专业建议</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div v-for="rec in comprehensiveReport.recommendations" :key="rec.id"
+                                 class="glass" style="padding: 1.5rem; border-radius: 12px; display: flex; align-items: center; gap: 1rem;">
+                                <span class="status-badge" :class="rec.priority">
+                                    {{ rec.priority }}
+                                </span>
+                                <p style="flex: 1;">{{ rec.content }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group" style="justify-content: center;">
+                        <button @click="downloadReport" class="btn btn-primary">
+                            <i class="fas fa-download"></i>
+                            下载报告
+                        </button>
+                        <button @click="printReport" class="btn btn-secondary">
+                            <i class="fas fa-print"></i>
+                            打印报告
+                        </button>
+                        <button @click="shareReport" class="btn btn-secondary">
+                            <i class="fas fa-share"></i>
+                            分享报告
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置视图 -->
+            <div v-if="currentView === 'settings'" class="fade-in">
+                <h1 style="margin-bottom: 2rem; font-size: 2rem;">系统设置</h1>
+
+                <div class="card glass" style="margin-bottom: 2rem;">
+                    <h3 style="margin-bottom: 1.5rem;">
+                        <i class="fas fa-sliders-h" style="margin-right: 0.5rem;"></i>
+                        分析参数
+                    </h3>
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem;">情感强度阈值: {{ settings.emotionThreshold }}</label>
+                            <input type="range" v-model="settings.emotionThreshold" min="0" max="100"
+                                   style="width: 100%; cursor: pointer;">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem;">风险预警级别</label>
+                            <select v-model="settings.riskLevel" class="text-input" style="min-height: auto; padding: 0.75rem;">
+                                <option value="low">低</option>
+                                <option value="medium">中</option>
+                                <option value="high">高</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass">
+                    <h3 style="margin-bottom: 1.5rem;">
+                        <i class="fas fa-shield-alt" style="margin-right: 0.5rem;"></i>
+                        隐私设置
+                    </h3>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 1rem; cursor: pointer;">
+                            <input type="checkbox" v-model="settings.anonymizeData" style="width: 20px; height: 20px;">
+                            <span>匿名化数据处理</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 1rem; cursor: pointer;">
+                            <input type="checkbox" v-model="settings.encryptStorage" style="width: 20px; height: 20px;">
+                            <span>加密本地存储</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="control-group" style="justify-content: center; margin-top: 2rem;">
+                    <button @click="saveSettings" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        保存设置
+                    </button>
+                    <button @click="resetSettings" class="btn btn-secondary">
+                        <i class="fas fa-undo"></i>
+                        恢复默认
+                    </button>
+                </div>
+            </div>
+        </main>
+        {% endraw %}
+    </div>
+
+    <!-- 引入本地JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
